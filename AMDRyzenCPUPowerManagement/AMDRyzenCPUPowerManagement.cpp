@@ -41,18 +41,27 @@ bool AMDRyzenCPUPowerManagement::init(OSDictionary *dictionary){
     IOLog("AMDCPUSupport::enter dlinking..\n");
     
     pmRyzen_symtable_ready = 0;
-    
-retry:
-    find_mach_header_addr(getKernelVersion() >= KernelVersion::BigSur);
-    pmRyzen_symtable._wrmsr_carefully = lookup_symbol("_wrmsr_carefully");
-    
-    if(!pmRyzen_symtable._wrmsr_carefully){
+
+    //_wrmsr_carefully may not be resolvable yet this early in boot; retry briefly
+    //instead of spinning forever if the symbol is ever missing/renamed.
+    static constexpr uint32_t kSymbolLookupMaxAttempts = 2500; // ~5s at 2ms/attempt
+    for (uint32_t attempt = 0; ; attempt++) {
+        find_mach_header_addr(getKernelVersion() >= KernelVersion::BigSur);
+        pmRyzen_symtable._wrmsr_carefully = lookup_symbol("_wrmsr_carefully");
+
+        if(pmRyzen_symtable._wrmsr_carefully) break;
+
+        if(attempt >= kSymbolLookupMaxAttempts){
+            IOLog("AMDCPUSupport::init unable to resolve _wrmsr_carefully after %u attempts, aborting.\n",
+                  kSymbolLookupMaxAttempts);
+            return false;
+        }
+
         kextloadAlerts++;
         IOSleep(2);
-        goto retry;
     }
-    
-    
+
+
     pmRyzen_symtable._KUNCUserNotificationDisplayAlert = lookup_symbol("_KUNCUserNotificationDisplayAlert");
     pmRyzen_symtable._cpu_to_processor = lookup_symbol("_cpu_to_processor");
     pmRyzen_symtable._tscFreq = lookup_symbol("_tscFreq");
@@ -396,7 +405,13 @@ void AMDRyzenCPUPowerManagement::stop(IOService *provider){
     timerEvent_main->cancelTimeout();
     workLoop->removeEventSource(timerEvent_main);
     timerEvent_main->release();
-    
+
+    timerEvent_tempe->cancelTimeout();
+    workLoop->removeEventSource(timerEvent_tempe);
+    timerEvent_tempe->release();
+
+    workLoop->release();
+
     if(superIO){
         for (int i = 0; i < superIO->getNumberOfFans(); i++) {
             superIO->setDefaultFanControl(i);
