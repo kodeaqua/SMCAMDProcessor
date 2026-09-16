@@ -105,10 +105,10 @@ pmDispatch_t pmRyzen_cpuFuncs = {
 
 void pmRyzen_init_PState(){
     uint64_t p0 = pmRyzen_rdmsr_safe(pmRyzen_io_service_handle, MSR_PSTATE_0);
-    float p0spd = (p0 & 0xff) / ((p0 >> 8) & 0x1f) * 200.0F;
-    
+    float p0spd = (float)(p0 & 0xff) / (float)((p0 >> 8) & 0x3f) * 200.0F;
+
     uint64_t p1 = pmRyzen_rdmsr_safe(pmRyzen_io_service_handle, MSR_PSTATE_0 + 1);
-    uint64_t p1fid = (uint64_t)((p0spd * 0.80F) / 200.0F * (float)((p1 >> 8) & 0x1f));
+    uint64_t p1fid = (uint64_t)((p0spd * 0.80F) / 200.0F * (float)((p1 >> 8) & 0x3f));
     
     wrmsr64(MSR_PSTATE_0 + 1, (p1 & ~0xFFULL) | p1fid | (1ULL << 63));
 }
@@ -152,7 +152,7 @@ void pmRyzen_init(void *handle){
     pmRyzen_pmUnRegister = (void(*)(pmDispatch_t*))pmRyzen_symtable._pmUnRegister;
     pmRyzen_cpu_NMI = (void(*)(int))pmRyzen_symtable._cpu_NMI_interrupt;
     pmRyzen_NMI_enabled = (void(*)(boolean_t))pmRyzen_symtable._NMIPI_enable;
-    pmRyzen_cpu_IPI = (void(*)(boolean_t))pmRyzen_symtable._i386_cpu_IPI;
+    pmRyzen_cpu_IPI = (void(*)(int))pmRyzen_symtable._i386_cpu_IPI;
     pmRyzen_tsc_freq = *((uint64_t*)pmRyzen_symtable._tscFreq);
     
     

@@ -279,7 +279,7 @@ bool AMDRyzenCPUPowerManagement::start(IOService *provider){
     IOLog("AMDCPUSupport::start Family %02Xh, Model %02Xh\n", cpuFamily, cpuModel);
     
     CPUInfo::getCpuid(0x80000005, 0, &cpuid_eax, &cpuid_ebx, &cpuid_ecx, &cpuid_edx);
-    cpuCacheL1_perCore = (cpuid_ecx >> 24) + (cpuid_ecx >> 24);
+    cpuCacheL1_perCore = (cpuid_ecx >> 24) + (cpuid_edx >> 24);
     
     
     CPUInfo::getCpuid(0x80000006, 0, &cpuid_eax, &cpuid_ebx, &cpuid_ecx, &cpuid_edx);
@@ -651,7 +651,8 @@ void AMDRyzenCPUPowerManagement::updatePackageEnergy(){
     uint32_t energyValue = (uint32_t)(msr_value_buf & 0xffffffff);
 
     uint64_t energyDelta = (lastUpdateEnergyValue <= energyValue) ?
-    energyValue - lastUpdateEnergyValue : UINT32_MAX - lastUpdateEnergyValue;
+    energyValue - lastUpdateEnergyValue :
+    ((uint64_t)UINT32_MAX - lastUpdateEnergyValue) + energyValue + 1;
 
     double seconds = (ctsc - pwrLastTSC) / (double)(xnuTSCFreq);
     double e = (pwrEnergyUnit * energyDelta) / (seconds);
