@@ -587,8 +587,15 @@ void AMDRyzenCPUPowerManagement::calculateEffectiveFrequency(uint8_t physical){
 }
 
 void AMDRyzenCPUPowerManagement::updateInstructionDelta(uint8_t cpu_num){
+    //instructionDelta_perCore/lastInstructionDelta_perCore are sized
+    //CPUInfo::MaxCpus; this is called every workloop tick for every logical
+    //CPU via mp_rendezvous_no_intrs with the raw cpu_number(), unlike the
+    //other per-CPU accesses in this callback which already go through the
+    //bounds-checked pmRyzen_cpu_* header accessors.
+    if(cpu_num >= CPUInfo::MaxCpus) return;
+
     uint64_t insCount;
-    
+
     if(!read_msr(kMSR_PERF_IRPC, &insCount))
         panic("AMDCPUSupport::updateInstructionDelta: fucked up");
     
