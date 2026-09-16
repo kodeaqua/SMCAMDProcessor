@@ -211,14 +211,20 @@ void pmRyzen_init(void *handle){
     cb.initComplete();
 }
 
+//Bound the per-core wake retry below so a lost IPI/offline core can't hang
+//kext stop forever; matches the ~5s budget used for symbol resolution retries.
+#define PMRYZEN_STOP_MAX_IPI_RETRIES 2500
+
 void pmRyzen_stop(){
-    
+
     (*pmRyzen_pmUnRegister)(&pmRyzen_cpuFuncs);
-    
+
     //Make sure all cores exited idle thread.
     for (int i = 0; i < pmRyzen_num_logi; i++) {
+        uint32_t retries = 0;
         while(pmRyzen_exit_idle(pmRyzen_cpunum_to_lcpu[i])){
             (*pmRyzen_cpu_IPI)(i);
+            if(++retries >= PMRYZEN_STOP_MAX_IPI_RETRIES) break;
         }
     }
 }
@@ -228,16 +234,21 @@ void pmRyzen_stop(){
 float pmRyzen_avgload_pcpu(uint32_t cpu){
     float loadacc = 0;
     int num_lcpus = 0;
-    
+
     x86_lcpu_t *lcpu = pmRyzen_cpunum_to_lcpu[cpu]->core->lcpus;
     while (lcpu) {
-        loadacc += 1 - (float)pmRyzen_cpus[lcpu->cpu_num].eff_idleaccd / (float)pmRyzen_cpus[lcpu->cpu_num].eff_timeaccd;
+        pmProcessor_t *p = &pmRyzen_cpus[lcpu->cpu_num];
+        //eff_timeaccd is still 0 until this lcpu completes its first
+        //effective-frequency interval (~150ms after boot); skip it rather
+        //than dividing by zero and poisoning the average with NaN.
+        if(p->eff_timeaccd)
+            loadacc += 1 - (float)p->eff_idleaccd / (float)p->eff_timeaccd;
         num_lcpus++;
-        
+
         lcpu = lcpu->next_in_core;
     }
-    
-    return loadacc / (float)num_lcpus;
+
+    return num_lcpus ? loadacc / (float)num_lcpus : 0;
 }
 
 
@@ -377,10 +388,16 @@ boolean_t pmRyzen_exit_idle(x86_lcpu_t *lcpu){
     return false;
     
 #else
+    //Non-MWAIT idle (HLT/IO-cstate) wakes on any interrupt, so a single IPI
+    //is enough; report "done" once the target has actually left idle so the
+    //caller's retry loop (pmRyzen_stop) can terminate instead of spinning
+    //forever re-sending IPIs.
+    if(target->cpu_awake) return false;
+
     target->arm_flag = 1;
 //    pmRyzen_exit_idle_ipi_c++;
-    
-    
+
+
     return true;
 #endif
 }

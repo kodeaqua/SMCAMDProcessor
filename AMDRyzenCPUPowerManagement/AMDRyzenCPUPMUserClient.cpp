@@ -357,15 +357,18 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
             
         //Set PStateDef
         case 15: {
+            arguments->scalarOutputCount = 0;
+            arguments->structureOutputSize = 0;
+
             if(!hasPrivilege())
                 return kIOReturnNotPrivileged;
-            
+
             if(arguments->scalarInputCount != 8)
                 return kIOReturnBadArgument;
-            
-            
+
+
             fProvider->writePstate(arguments->scalarInput);
-            
+
             break;
         }
             
@@ -484,12 +487,22 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
             const char *str = fProvider->superIO->getReadableStringForFan((int)arguments->scalarInput[0]);
             if(!str)
                 return kIOReturnBadArgument;
-            arguments->structureOutputSize = (uint32_t)strlen(str);
-            
+
+            //strcpy(dest, src, len) (see MacKernelSDK/Headers/string.h) is a
+            //macro that silently discards `len` and expands to
+            //__builtin___strcpy_chk, whose bound comes from
+            //__builtin_object_size(dest, 1) -- unknowable for a plain
+            //pointer like dataOut, so it gave no real overflow protection.
+            //strlcpy actually honors the length we pass it.
+            static constexpr uint32_t kMaxFanNameLen = 64;
+            uint32_t len = (uint32_t)strlen(str);
+            if(len > kMaxFanNameLen - 1) len = kMaxFanNameLen - 1;
+            arguments->structureOutputSize = len;
+
             char *dataOut = (char*) arguments->structureOutput;
-            strcpy(dataOut, str, strlen(str));
-            
-            
+            strlcpy(dataOut, str, kMaxFanNameLen);
+
+
             break;
         }
             

@@ -101,5 +101,12 @@ bool SMCAMDProcessor::start(IOService *provider){
 }
 
 void SMCAMDProcessor::stop(IOService *provider){
-    
+    //Without this, VirtualSMCAPI can still invoke vsmcNotificationHandler
+    //with a `sensors` pointer to this instance after it has been torn down.
+    if(vsmcNotifier){
+        vsmcNotifier->remove();
+        vsmcNotifier = nullptr;
+    }
+
+    IOService::stop(provider);
 }
