@@ -249,6 +249,9 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
 
         //Get per core load index
         case 6: {
+            if(fProvider->totalNumberOfPhysicalCores == 0)
+                return kIOReturnNotReady;
+
             uint32_t needed = (fProvider->totalNumberOfPhysicalCores) * sizeof(float);
             if(needed > outCapacity) return kIOReturnBadArgument;
 
