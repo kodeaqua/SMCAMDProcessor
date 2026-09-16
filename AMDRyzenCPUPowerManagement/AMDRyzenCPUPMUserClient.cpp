@@ -66,7 +66,16 @@ bool AMDRyzenCPUPMUserClient::hasPrivilege(){
     if(fProvider->disablePrivilegeCheck) return true;
     if(clientHasPrivilege(token, kIOClientPrivilegeAdministrator) == kIOReturnSuccess) return true;
     if(clientAuthorizedByUser) return true;
-    
+
+    if(!fProvider->kunc_alert){
+        //_KUNCUserNotificationDisplayAlert wasn't found at symbol-resolution time
+        //(happens on some macOS versions -- see AMDRyzenCPUPowerManagement::start).
+        //There's no way to prompt the user, so fail closed instead of calling a
+        //NULL function pointer.
+        IOLog("AMDCPUSupportUserClient::hasPrivilege kunc_alert unavailable, denying\n");
+        return false;
+    }
+
     char buf[128];
     snprintf(buf, 128,
              "A process is trying to make changes to your system.\nAffected process name: %s\n\nAuthorize?",
@@ -108,14 +117,14 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
     //it before writing.
     const uint32_t outCapacity = arguments->structureOutput ? arguments->structureOutputSize : 0;
 
-    if (fProvider->kextloadAlerts) {
+    if (fProvider->kextloadAlerts && fProvider->kunc_alert) {
         unsigned int rf;
-        
+
         char buf[128];
         snprintf(buf, 128,
                  "Kext alert detected: %d",
                  fProvider->kextloadAlerts);
-        
+
         (*(fProvider->kunc_alert))(0, 0, NULL, NULL, NULL,
                       "AMDRyzenCPUPowerManagement", buf, "Ok", "Ok and Clear Alert", "WTF?", &rf);
         if(rf == 1){
