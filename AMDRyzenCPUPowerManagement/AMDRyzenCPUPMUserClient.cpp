@@ -482,6 +482,8 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
                 
             
             const char *str = fProvider->superIO->getReadableStringForFan((int)arguments->scalarInput[0]);
+            if(!str)
+                return kIOReturnBadArgument;
             arguments->structureOutputSize = (uint32_t)strlen(str);
             
             char *dataOut = (char*) arguments->structureOutput;
