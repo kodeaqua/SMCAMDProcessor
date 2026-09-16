@@ -88,34 +88,49 @@ bool AMDRyzenCPUPowerManagement::getPCIService(){
         IOLog("AMDCPUSupport::getPCIService: serviceMatching unable to generate matching dictonary.\n");
         return false;
     }
-    
-    //Wait for PCI services to init.
-    waitForMatchingService(matching_dict);
-    
-    OSIterator *service_iter = getMatchingServices(matching_dict);
-    IOPCIDevice *service = 0;
-    
-    if(!service_iter){
-        IOLog("AMDCPUSupport::getPCIService: unable to find a matching IOPCIDevice.\n");
+
+    //Wait for PCI services to init, but don't block the boot/matching thread
+    //forever if one never shows up -- waitForMatchingService's default
+    //timeout is UINT64_MAX (wait forever), and start() (and everything
+    //gated behind this kext registering, e.g. SMCAMDProcessor) calls this
+    //synchronously.
+    static constexpr uint64_t kPCIServiceWaitTimeoutNs = 5ULL * 1000 * 1000 * 1000; // 5s
+    IOService *waited = waitForMatchingService(matching_dict, kPCIServiceWaitTimeoutNs);
+    if(!waited){
+        IOLog("AMDCPUSupport::getPCIService: timed out waiting for an IOPCIDevice.\n");
+        matching_dict->release();
         return false;
     }
-    
+    waited->release();
+
+    OSIterator *service_iter = getMatchingServices(matching_dict);
+    IOPCIDevice *service = 0;
+
+    if(!service_iter){
+        IOLog("AMDCPUSupport::getPCIService: unable to find a matching IOPCIDevice.\n");
+        matching_dict->release();
+        return false;
+    }
+
     while (true){
         OSObject *obj = service_iter->getNextObject();
         if(!obj) break;
-        
+
         service = OSDynamicCast(IOPCIDevice, obj);
         break;
     }
-    
+
+    service_iter->release();
+    matching_dict->release();
+
     if(!service){
         IOLog("AMDCPUSupport::getPCIService: unable to get IOPCIDevice on host system.\n");
         return false;
     }
-    
+
     IOLog("AMDCPUSupport::getPCIService: succeed!\n");
     fIOPCIDevice = service;
-    
+
     return true;
 }
 
