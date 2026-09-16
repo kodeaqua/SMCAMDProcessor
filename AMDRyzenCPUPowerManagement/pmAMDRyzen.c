@@ -179,17 +179,27 @@ void pmRyzen_init(void *handle){
             x86_lcpu_t *lcpu = core->lcpus;
             
             while (lcpu) {
+                //pmRyzen_cpunum_to_lcpu/pmRyzen_cpus are fixed at XNU_MAX_CPU
+                //entries; don't write past them on a system with more logical
+                //CPUs than that (e.g. high-end Threadripper/EPYC parts).
+                if(lcpu->cpu_num >= XNU_MAX_CPU){
+                    IOLog("pmAMDRyzen: cpu_num %u exceeds supported max %u, skipping.\n",
+                          lcpu->cpu_num, XNU_MAX_CPU);
+                    lcpu = lcpu->next_in_core;
+                    continue;
+                }
+
                 pmRyzen_num_logi++;
 //                IOLog("LCPU: %u master:%u, primary:%u\n", lcpu->cpu_num, lcpu->master, lcpu->primary);
-                
+
                 pmRyzen_cpunum_to_lcpu[lcpu->cpu_num] = lcpu;
-                
+
                 pmProcessor_t *cpu = &pmRyzen_cpus[lcpu->cpu_num];
                 cpu->lcpu = lcpu;
                 cpu->stat_exit_idle = 0;
                 cpu->arm_flag = 0;
                 cpu->cpu_awake = 1;
-                
+
                 lcpu = lcpu->next_in_core;
             }
             
@@ -257,8 +267,17 @@ uint32_t pmRyzen_last_woken_cpu=0;
 uint64_t pmRyzen_machine_idle(uint64_t maxDur){
 
     __asm__ volatile("cli;");
-    
+
     uint32_t cn = cpu_number();
+
+    //cpu_number() can exceed the XNU_MAX_CPU cap this driver's per-CPU
+    //arrays are sized for on systems with more than 64 logical CPUs; just
+    //idle without touching per-CPU state rather than indexing out of bounds.
+    if(cn >= XNU_MAX_CPU){
+        __asm__ volatile("sti; hlt;");
+        return 0;
+    }
+
 //    pmRyzen_last_idle_cpu = cn;
     pmProcessor_t *self = &pmRyzen_cpus[cn];
     
@@ -361,7 +380,10 @@ uint64_t pmRyzen_machine_idle(uint64_t maxDur){
 }
 
 boolean_t pmRyzen_exit_idle(x86_lcpu_t *lcpu){
-    
+
+    //Same XNU_MAX_CPU cap as pmRyzen_machine_idle(); nothing to wake if we
+    //never tracked this CPU in the first place.
+    if(lcpu->cpu_num >= XNU_MAX_CPU) return false;
 
     pmProcessor_t *target = &pmRyzen_cpus[lcpu->cpu_num];
 
@@ -403,15 +425,21 @@ boolean_t pmRyzen_exit_idle(x86_lcpu_t *lcpu){
 }
 
 int pmRyzen_choose_cpu(int startCPU, int endCPU, int preferredCPU){
-    
+
     //We only provide a hint as scheduler will make the final decision anyway.
-  
+
 //    return preferredCPU;
-    
+
+    //preferredCPU comes straight from the kernel scheduler and isn't bound
+    //to XNU_MAX_CPU; only consult pmRyzen_cpus[] for indices we actually
+    //track, and just hand back the hint untouched otherwise.
+    if(preferredCPU < 0 || (uint32_t)preferredCPU >= XNU_MAX_CPU)
+        return preferredCPU;
+
     if(pmRyzen_cpus[preferredCPU].cpu_awake)
         return preferredCPU;
 
-    if(pmRyzen_cpus[pmRyzen_last_woken_cpu].cpu_awake)
+    if(pmRyzen_last_woken_cpu < XNU_MAX_CPU && pmRyzen_cpus[pmRyzen_last_woken_cpu].cpu_awake)
         return pmRyzen_last_woken_cpu;
     
 //    for(int i = startCPU; i < endCPU; i++){
