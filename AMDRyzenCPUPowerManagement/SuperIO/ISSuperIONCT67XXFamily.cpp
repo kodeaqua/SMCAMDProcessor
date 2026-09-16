@@ -98,13 +98,20 @@ ISSuperIONCT67XXFamily* ISSuperIONCT67XXFamily::getDevice(uint16_t *chipIntel){
     ISLPCPort::select(portSel, CHIP_HWM_LDN);
     
     uint16_t devAddr = ISLPCPort::readWord(portSel, ISLPCPort::kBASE_ADDRESS_REGISTER);
-    
+
     //verify addr
     IOSleep(100);
     if(ISLPCPort::readWord(portSel, ISLPCPort::kBASE_ADDRESS_REGISTER) != devAddr){
-        IOLog("NCT67XX address verify failed");
+        //Readback mismatch means we can't trust devAddr -- constructing the
+        //device with it would have every later readByte()/writeByte() (and
+        //overrideFanControl()) hit whatever I/O port range that bad address
+        //points at instead of the real chip. Close the SIO port and fail
+        //detection instead of proceeding with an unverified address.
+        IOLog("NCT67XX address verify failed, aborting detection\n");
+        outb(regport, CHIP_SIO_CLOSE);
+        return nullptr;
     }
-    
+
     IOLog("Chip address: 0x%X\n", devAddr);
     
     //Now that the present of chip is confirmed, disable IO address space lock.

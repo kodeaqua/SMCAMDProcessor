@@ -104,7 +104,17 @@ ISSuperIOIT86XXEFamily* ISSuperIOIT86XXEFamily::getDevice(uint16_t* chipIntel)
     IOSleep(100);
     if (ISLPCPort::readWord(portSel, ISLPCPort::kBASE_ADDRESS_REGISTER) != devAddr)
     {
-        IOLog("IT%X%XE address verify failed", deviceID, revision);
+        //Readback mismatch means we can't trust devAddr -- constructing the
+        //device with it would have every later readByte()/writeByte() (and
+        //overrideFanControl()) hit whatever I/O port range that bad address
+        //points at instead of the real chip. Close the SIO port and fail
+        //detection instead of proceeding with an unverified address.
+        IOLog("IT%X%XE address verify failed, aborting detection\n", deviceID, revision);
+        if (regport != 0x4E)
+        {
+            outb(regport, 0x02);
+        }
+        return nullptr;
     }
 
     ISLPCPort::select(portSel, CHIP_GPIO_LDN);
