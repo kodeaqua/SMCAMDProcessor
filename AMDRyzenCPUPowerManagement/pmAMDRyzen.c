@@ -124,9 +124,9 @@ inline void set_PState(pmProcessor_t *cpu, uint8_t state){
     cpu->PState = state;
     
     if(!state){
-        __asm__ volatile("lock incq (%0)"::"r"(&pmRyzen_hpcpus):"memory");
+        __asm__ volatile("lock incl (%0)"::"r"(&pmRyzen_hpcpus):"memory");
     } else if(from_hpstate) {
-        __asm__ volatile("lock decq (%0)"::"r"(&pmRyzen_hpcpus):"memory");
+        __asm__ volatile("lock decl (%0)"::"r"(&pmRyzen_hpcpus):"memory");
     }
 }
 
