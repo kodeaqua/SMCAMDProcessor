@@ -459,6 +459,15 @@ IOReturn AMDRyzenCPUPowerManagement::setPowerState(unsigned long powerStateOrdin
 
 void AMDRyzenCPUPowerManagement::fetchOEMBaseBoardInfo(){
     auto efiRT = EfiRuntimeServices::get();
+    if(!efiRT){
+        //EfiRuntimeServices::get() returns null when EFI runtime services
+        //aren't supported/activated on this system -- dereferencing it
+        //unconditionally would panic the kernel on such setups.
+        IOLog("AMDCPUSupport: EFI runtime services unavailable, skipping base board info.\n");
+        boardInfoValid = false;
+        return;
+    }
+
     uint32_t att = 0;
     uint64_t sizee = BASEBOARD_STRING_MAX;
     uint64_t efistat;
