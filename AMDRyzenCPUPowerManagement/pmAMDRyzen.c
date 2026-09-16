@@ -188,7 +188,17 @@ void pmRyzen_init(void *handle){
         x86_core_t *core = pkg->cores;
         
         while (core) {
-            pmRyzen_num_phys++;
+            //pmRyzen_num_phys becomes totalNumberOfPhysicalCores, which is used
+            //as the loop bound when copying fixed XNU_MAX_CPU-sized per-core
+            //arrays (e.g. effFreq_perCore[]) out to UserClient callers. Cap it
+            //so a system with more physical cores than that (e.g. modern
+            //high-core-count EPYC parts) can't push those copies out of bounds.
+            if(pmRyzen_num_phys < XNU_MAX_CPU){
+                pmRyzen_num_phys++;
+            } else {
+                IOLog("pmAMDRyzen: physical core count exceeds supported max %u, no longer counting further cores.\n",
+                      XNU_MAX_CPU);
+            }
             x86_lcpu_t *lcpu = core->lcpus;
             
             while (lcpu) {
@@ -257,6 +267,12 @@ void pmRyzen_stop(){
 float pmRyzen_avgload_pcpu(uint32_t cpu){
     float loadacc = 0;
     int num_lcpus = 0;
+
+    //cpu is caller-supplied (reaches here from an unprivileged UserClient
+    //selector via an arithmetic core-index guess); pmRyzen_cpunum_to_lcpu[]
+    //is a fixed XNU_MAX_CPU array and not every slot in range is populated,
+    //so both the bound and the NULL slot must be checked before dereferencing.
+    if(cpu >= XNU_MAX_CPU || !pmRyzen_cpunum_to_lcpu[cpu]) return 0;
 
     x86_lcpu_t *lcpu = pmRyzen_cpunum_to_lcpu[cpu]->core->lcpus;
     while (lcpu) {
@@ -394,6 +410,10 @@ uint64_t pmRyzen_machine_idle(uint64_t maxDur){
 
 boolean_t pmRyzen_exit_idle(x86_lcpu_t *lcpu){
 
+    //pmRyzen_stop()'s unload loop looks lcpu up by pmRyzen_cpunum_to_lcpu[i]
+    //rather than a verified cpu_num, so a NULL slot can reach here.
+    if(!lcpu) return false;
+
     //Same XNU_MAX_CPU cap as pmRyzen_machine_idle(); nothing to wake if we
     //never tracked this CPU in the first place.
     if(lcpu->cpu_num >= XNU_MAX_CPU) return false;
@@ -464,5 +484,9 @@ int pmRyzen_choose_cpu(int startCPU, int endCPU, int preferredCPU){
 }
 
 pmProcessor_t* pmRyzen_get_processor(uint32_t cpu){
+    //Exported symbol with a caller-supplied index; pmRyzen_cpus[] is a fixed
+    //XNU_MAX_CPU array, so an out-of-range cpu must not be allowed to form
+    //an out-of-bounds pointer.
+    if(cpu >= XNU_MAX_CPU) return NULL;
     return &pmRyzen_cpus[cpu];
 }
