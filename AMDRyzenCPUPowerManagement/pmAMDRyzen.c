@@ -105,12 +105,25 @@ pmDispatch_t pmRyzen_cpuFuncs = {
 
 void pmRyzen_init_PState(){
     uint64_t p0 = pmRyzen_rdmsr_safe(pmRyzen_io_service_handle, MSR_PSTATE_0);
-    float p0spd = (float)(p0 & 0xff) / (float)((p0 >> 8) & 0x3f) * 200.0F;
+    uint32_t p0_did = (p0 >> 8) & 0x3f;
+    if(p0_did == 0){
+        //CpuDid == 0 here means either the MSR read failed (pmRyzen_rdmsr_safe
+        //returns 0 on failure, which reads back as CpuDid 0) or the hardware
+        //reported a bogus P0 state. Dividing by it below would produce
+        //NaN/inf, and casting that to uint64_t is undefined behavior -- bail
+        //out instead of programming an undefined value into a CPU
+        //voltage/frequency control MSR.
+        IOLog("pmAMDRyzen: MSR_PSTATE_0 CpuDid is 0 (read may have failed), skipping P1 tuning.\n");
+        return;
+    }
+    float p0spd = (float)(p0 & 0xff) / (float)p0_did * 200.0F;
 
     uint64_t p1 = pmRyzen_rdmsr_safe(pmRyzen_io_service_handle, MSR_PSTATE_0 + 1);
     uint64_t p1fid = (uint64_t)((p0spd * 0.80F) / 200.0F * (float)((p1 >> 8) & 0x3f));
-    
-    wrmsr64(MSR_PSTATE_0 + 1, (p1 & ~0xFFULL) | p1fid | (1ULL << 63));
+
+    //p1fid only belongs in CpuFid (bits 7:0); mask it so a larger-than-expected
+    //computed value can't spill into CpuDid/CpuVid instead of just clamping.
+    wrmsr64(MSR_PSTATE_0 + 1, (p1 & ~0xFFULL) | (p1fid & 0xFFULL) | (1ULL << 63));
 }
 
 inline void set_PState(pmProcessor_t *cpu, uint8_t state){
