@@ -79,7 +79,7 @@ ISSuperIONCT668X* ISSuperIONCT668X::getDevice(uint16_t *chipIntel){
         case CHIP_NCT6683:
             conf = ISLPCPort::readByte(portSel, 0x30);
             if(conf & 0x01){
-                ISLPCPort::writeByte(portSel, 0x30, conf & 0x01);
+                ISLPCPort::writeByte(portSel, 0x30, conf & ~0x01);
             }
             break;
             
@@ -148,7 +148,7 @@ void ISSuperIONCT668X::updateFanRPMS(){
 }
 
 void ISSuperIONCT668X::updateFanControl(){
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < activeFansOnSystem; i++) {
 //        fanControlMode[i] = readByte(kFAN_CTRL_MODE_REGS(i));
 //        IOLog("fan ctrl %d: %d\n", i, (int)v);
         

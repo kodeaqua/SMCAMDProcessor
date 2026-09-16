@@ -12,7 +12,9 @@ class ISSuperIOSMCFamily {
 
     
 public:
-    
+
+    virtual ~ISSuperIOSMCFamily() = default;
+
     virtual int getNumberOfFans();
     virtual const char *getReadableStringForFan(int fan);
     
