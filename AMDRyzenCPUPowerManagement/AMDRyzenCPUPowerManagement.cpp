@@ -454,6 +454,13 @@ void AMDRyzenCPUPowerManagement::fetchOEMBaseBoardInfo(){
     efistat = efiRT->getVariable(OC_OEM_BOARD_VARIABLE_NAME, &EfiRuntimeServices::LiluVendorGuid,
                                  &att, &sizee, boardName);
     boardInfoValid = efistat == EFI_SUCCESS;
+
+    //EFI GetVariable() copies the variable's raw bytes verbatim and gives no
+    //guarantee of NUL termination; force it so the %s below (and any later
+    //string use of these buffers) can't read past the array.
+    boardVender[BASEBOARD_STRING_MAX - 1] = '\0';
+    boardName[BASEBOARD_STRING_MAX - 1] = '\0';
+
     IOLog("MB: %s %s\n", boardName, boardVender);
 }
 
