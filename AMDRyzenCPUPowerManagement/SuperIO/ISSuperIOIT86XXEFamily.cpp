@@ -166,14 +166,18 @@ bool ISSuperIOIT86XXEFamily::getFanAutoControlMode(int fan)
 {
     if (fan < 0 || fan >= activeFansOnSystem)
         return 0;
-    return fanControlMode[fan] != 0;
+    //Bit 7 of the PWM control register is the hardware SmartGuardian
+    //(auto) vs. software (manual) select -- see overrideFanControl(),
+    //which clears it to force manual, and setDefaultFanControl(), which
+    //restores the captured value verbatim.
+    return (fanControlMode[fan] & 0x80) != 0;
 }
 
 uint8_t ISSuperIOIT86XXEFamily::getFanThrottle(int fan)
 {
     if (fan < 0 || fan >= activeFansOnSystem)
         return 0;
-    return fanControlMode[fan];
+    return fanThrottles[fan];
 }
 
 void ISSuperIOIT86XXEFamily::updateFanRPMS()
@@ -198,7 +202,14 @@ void ISSuperIOIT86XXEFamily::updateFanControl()
 {
     for (int i = 0; i < activeFansOnSystem; i++)
     {
-        fanControlMode[i] = readByte(kFAN_PWM_CTRL_EXT_REGS[i]);
+        //kFAN_PWM_CTRL_REGS holds the auto/manual mode bit (see
+        //getFanAutoControlMode); kFAN_PWM_CTRL_EXT_REGS holds the actual
+        //duty cycle. These used to both be crammed into fanControlMode,
+        //leaving fanThrottles permanently zero and making
+        //getFanAutoControlMode() effectively test "duty != 0" instead of
+        //the real mode bit.
+        fanControlMode[i] = readByte(kFAN_PWM_CTRL_REGS[i]);
+        fanThrottles[i] = readByte(kFAN_PWM_CTRL_EXT_REGS[i]);
     }
 }
 

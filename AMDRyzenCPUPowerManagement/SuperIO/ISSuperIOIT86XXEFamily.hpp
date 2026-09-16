@@ -45,6 +45,7 @@ class ISSuperIOIT86XXEFamily : public ISSuperIOSMCFamily
 
     int fanRPMs[IT86XXE_MAX_NUMFAN];
     uint8_t fanControlMode[IT86XXE_MAX_NUMFAN];
+    uint8_t fanThrottles[IT86XXE_MAX_NUMFAN];
 
     int activeFansOnSystem = 0;
 
