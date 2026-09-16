@@ -281,10 +281,13 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
         case 10: {
             arguments->scalarOutputCount = 0;
             arguments->structureOutputSize = 0;
-            
+
+            if(!hasPrivilege())
+                return kIOReturnNotPrivileged;
+
             if(arguments->scalarInputCount != 1)
                 return kIOReturnBadArgument;
-            
+
             fProvider->PStateCtl = (uint8_t)arguments->scalarInput[0];
             fProvider->applyPowerControl();
             break;
@@ -307,13 +310,16 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
         case 12: {
             arguments->scalarOutputCount = 0;
             arguments->structureOutputSize = 0;
-            
+
+            if(!hasPrivilege())
+                return kIOReturnNotPrivileged;
+
             if(arguments->scalarInputCount != 1)
                 return kIOReturnBadArgument;
-            
+
             if(!fProvider->cpbSupported)
                 return kIOReturnNoDevice;
-            
+
             fProvider->setCPBState(arguments->scalarInput[0]==1?true:false);
             
             break;
@@ -335,12 +341,15 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
         case 14: {
             arguments->scalarOutputCount = 0;
             arguments->structureOutputSize = 0;
-                
+
+            if(!hasPrivilege())
+                return kIOReturnNotPrivileged;
+
             if(arguments->scalarInputCount != 1)
                 return kIOReturnBadArgument;
-                
+
             boolean_t enabled = arguments->scalarInput[0]==1?true:false;
-            
+
             fProvider->setPMPStateLimit(enabled ? 1 : 0);
             
             break;
@@ -411,12 +420,15 @@ IOReturn AMDRyzenCPUPMUserClient::externalMethod(uint32_t selector, IOExternalMe
         case 19: {
             arguments->scalarOutputCount = 0;
             arguments->structureOutputSize = 0;
-                
+
+            if(!hasPrivilege())
+                return kIOReturnNotPrivileged;
+
             if(arguments->scalarInputCount != 1)
                 return kIOReturnBadArgument;
-                
+
             boolean_t enabled = arguments->scalarInput[0]==1?true:false;
-            
+
             fProvider->setPMPStateLimit(enabled ? 2 : 1);
             
             break;
